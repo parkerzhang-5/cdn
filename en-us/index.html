@@ -1,0 +1,452 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>GitHub File Manager</title>
+<style>
+* { margin:0; padding:0; box-sizing:border-box; font-family:"Microsoft YaHei",sans-serif; }
+body { background:#f5f5f5; height:100vh; display:flex; flex-direction:column; }
+
+.top-bar {
+    height:50px; background:#fff; border-bottom:1px solid #ddd;
+    display:flex; align-items:center; padding:0 10px; gap:6px;
+    flex-wrap:wrap;
+}
+.btn {
+    padding:6px 8px; border:1px solid #ccc; background:#fff;
+    border-radius:4px; cursor:pointer; font-size:12px;
+}
+.btn:hover { background:#f0f0f0; }
+.path-bar {
+    flex:1; padding:6px 10px; border:1px solid #ccc; border-radius:4px;
+    min-width:120px;
+}
+.file-area {
+    flex:1; padding:20px; display:grid;
+    grid-template-columns:repeat(auto-fill,100px);
+    gap:20px; align-content:start; overflow:auto;
+}
+.item {
+    width:100px; text-align:center; cursor:pointer;
+}
+.item-icon { font-size:48px; margin-bottom:5px; }
+.item-name { font-size:14px; word-break:break-all; }
+.item.selected { background:#cce5ff; }
+
+.context-menu {
+    position:fixed; width:180px; background:#fff;
+    border:1px solid #ccc; box-shadow:2px 2px 5px #aaa;
+    display:none; z-index:999;
+}
+.context-menu div { padding:8px 12px; cursor:pointer; font-size:14px; }
+.context-menu div:hover { background:#e9e9e9; }
+
+.modal {
+    position:fixed; top:0; left:0; right:0; bottom:0;
+    background:rgba(0,0,0,0.3); display:none;
+    align-items:center; justify-content:center; z-index:1000;
+}
+.modal-box {
+    background:#fff; padding:20px; border-radius:6px; width:550px;
+}
+.modal-box input, .modal-box textarea { width:100%; padding:8px; margin:10px 0; }
+.modal-buttons { display:flex; justify-content:flex-end; gap:10px; }
+.tip { color:#666; font-size:12px; text-align:center; padding:5px; }
+</style>
+</head>
+<body>
+
+<div class="top-bar">
+    <button class="btn" id="backBtn">← Back</button>
+    <input type="text" class="path-bar" id="pathBar" readonly>
+    <button class="btn" id="newFolderBtn">New Folder</button>
+    <button class="btn" id="newFileBtn">New Text File</button>
+    <button class="btn" id="uploadFileBtn">📤 Upload File</button>
+    <button class="btn" id="importFSBtn">Import FS</button>
+    <button class="btn" id="exportFSBtn">Export FS</button>
+</div>
+<div class="tip">✅ All files auto-saved to GitHub cdn repo</div>
+<div class="file-area" id="fileArea"></div>
+
+<!-- Right‑click Menu -->
+<div class="context-menu" id="contextMenu">
+    <div id="viewMenu">👁 View</div>
+    <div id="editMenu">✏ Edit</div>
+    <div id="downloadMenu">💾 Download</div>
+    <div id="renameMenu">📝 Rename</div>
+    <div id="deleteMenu">🗑 Delete</div>
+</div>
+
+<!-- View Modal -->
+<div class="modal" id="viewModal">
+    <div class="modal-box">
+        <h3>👁 View File (Read‑Only)</h3>
+        <textarea id="viewContent" rows="15" readonly style="white-space:pre-wrap;"></textarea>
+        <div class="modal-buttons">
+            <button class="btn" id="viewCloseBtn">Close</button>
+        </div>
+    </div>
+</div>
+
+<!-- Edit Modal -->
+<div class="modal" id="editModal">
+    <div class="modal-box">
+        <h3>✏ Edit File</h3>
+        <textarea id="editContent" rows="15"></textarea>
+        <div class="modal-buttons">
+            <button class="btn" id="editCancelBtn">Cancel</button>
+            <button class="btn" id="editSaveBtn">Save to GitHub</button>
+        </div>
+    </div>
+</div>
+
+<!-- Rename Modal -->
+<div class="modal" id="renameModal">
+    <div class="modal-box">
+        <h3>📝 Rename</h3>
+        <input type="text" id="renameInput">
+        <div class="modal-buttons">
+            <button class="btn" id="renameCancelBtn">Cancel</button>
+            <button class="btn" id="renameConfirmBtn">OK</button>
+        </div>
+    </div>
+</div>
+
+<!-- Hidden File Inputs -->
+<input type="file" id="uploadLocalFileInput" style="display:none">
+<input type="file" id="importFSInput" accept=".json" style="display:none">
+
+<script>
+const GITHUB_USER = "parkerzhang-5";
+const GITHUB_REPO = "cdn";
+const GITHUB_TOKEN = "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";
+
+const API_BASE = `https://api.github.com/repos/${GITHUB_USER}/${GITHUB_REPO}/contents`;
+let pathStack = [];
+let currentDir = null;
+let selectedItem = null;
+let currentEditFileName = "";
+
+const fileArea = document.getElementById("fileArea");
+const pathBar = document.getElementById("pathBar");
+const backBtn = document.getElementById("backBtn");
+const newFolderBtn = document.getElementById("newFolderBtn");
+const newFileBtn = document.getElementById("newFileBtn");
+const uploadFileBtn = document.getElementById("uploadFileBtn");
+const importFSBtn = document.getElementById("importFSBtn");
+const exportFSBtn = document.getElementById("exportFSBtn");
+
+const uploadLocalFileInput = document.getElementById("uploadLocalFileInput");
+const importFSInput = document.getElementById("importFSInput");
+
+const contextMenu = document.getElementById("contextMenu");
+const viewModal = document.getElementById("viewModal");
+const viewContent = document.getElementById("viewContent");
+const viewCloseBtn = document.getElementById("viewCloseBtn");
+const editModal = document.getElementById("editModal");
+const editContent = document.getElementById("editContent");
+const editCancelBtn = document.getElementById("editCancelBtn");
+const editSaveBtn = document.getElementById("editSaveBtn");
+const renameModal = document.getElementById("renameModal");
+const renameInput = document.getElementById("renameInput");
+const renameCancelBtn = document.getElementById("renameCancelBtn");
+const renameConfirmBtn = document.getElementById("renameConfirmBtn");
+
+(async function init(){
+    await initFS();
+})();
+
+async function getFile(path){
+    const res = await fetch(`${API_BASE}/${path}`,{
+        headers:{Authorization:`token ${GITHUB_TOKEN}`}
+    });
+    if(!res.ok) return null;
+    const data = await res.json();
+    return {
+        content: atob(data.content),
+        sha: data.sha,
+        raw: data.content
+    };
+}
+
+async function saveFile(path, base64Content, sha=null){
+    await fetch(`${API_BASE}/${path}`,{
+        method:"PUT",
+        headers:{
+            Authorization:`token ${GITHUB_TOKEN}`,
+            "Content-Type":"application/json"
+        },
+        body:JSON.stringify({
+            message:"auto save",
+            content: base64Content,
+            sha: sha
+        })
+    });
+}
+
+async function deleteFile(path, sha){
+    await fetch(`${API_BASE}/${path}`,{
+        method:"DELETE",
+        headers:{
+            Authorization:`token ${GITHUB_TOKEN}`,
+            "Content-Type":"application/json"
+        },
+        body:JSON.stringify({message:"delete", sha:sha})
+    });
+}
+
+async function initFS(){
+    let fsData = await getFile("fs.json");
+    if(!fsData){
+        await saveFile("fs.json", btoa(JSON.stringify({
+            name:"Root", type:"folder", children:[]
+        }, null, 2)));
+        alert("✅ GitHub file system initialized!");
+        pathStack = [{name:"Root", type:"folder", children:[]}];
+        currentDir = pathStack[0];
+    }else{
+        const root = JSON.parse(fsData.content);
+        pathStack = [root];
+        currentDir = root;
+    }
+    render();
+}
+
+async function saveFS(){
+    const root = pathStack[0];
+    const fsData = await getFile("fs.json");
+    await saveFile("fs.json", btoa(JSON.stringify(root,null,2)), fsData?.sha);
+}
+
+function render(){
+    fileArea.innerHTML = "";
+    pathBar.value = pathStack.map(d=>d.name).join(" / ");
+    if(!currentDir.children) return;
+    currentDir.children.forEach(item=>{
+        const div = document.createElement("div");
+        div.className = "item";
+        div.dataset.type = item.type;
+        div.dataset.name = item.name;
+        const icon = item.type === "folder" ? "📁" : "📄";
+        div.innerHTML = `<div class="item-icon">${icon}</div><div class="item-name">${item.name}</div>`;
+
+        div.addEventListener("click",e=>{
+            e.stopPropagation();
+            clearSelect();
+            div.classList.add("selected");
+            selectedItem = item;
+        });
+
+        div.addEventListener("dblclick",async ()=>{
+            if(item.type === "folder"){
+                pathStack.push(item);
+                currentDir = item;
+                render();
+            }else{
+                await openEdit(item.name);
+            }
+        });
+
+        div.addEventListener("contextmenu",e=>{
+            e.preventDefault();
+            clearSelect();
+            div.classList.add("selected");
+            selectedItem = item;
+            showContextMenu(e.clientX, e.clientY);
+        });
+
+        fileArea.appendChild(div);
+    });
+}
+
+backBtn.addEventListener("click",()=>{
+    if(pathStack.length>1){
+        pathStack.pop();
+        currentDir = pathStack[pathStack.length-1];
+        render();
+    }
+});
+
+document.addEventListener("click",()=>{
+    clearSelect();
+    hideContextMenu();
+});
+
+function clearSelect(){
+    document.querySelectorAll(".item.selected").forEach(el=>el.classList.remove("selected"));
+    selectedItem = null;
+}
+function showContextMenu(x,y){
+    contextMenu.style.left = x+"px";
+    contextMenu.style.top = y+"px";
+    contextMenu.style.display = "block";
+}
+function hideContextMenu(){
+    contextMenu.style.display = "none";
+}
+
+document.getElementById("viewMenu").addEventListener("click",async ()=>{
+    if(!selectedItem || selectedItem.type!=="file") return;
+    const file = await getFile(`files/${selectedItem.name}`);
+    viewContent.value = file ? file.content : "";
+    viewModal.style.display = "flex";
+    hideContextMenu();
+});
+viewCloseBtn.addEventListener("click",()=>viewModal.style.display="none");
+
+document.getElementById("editMenu").addEventListener("click",async ()=>{
+    if(!selectedItem || selectedItem.type!=="file") return;
+    await openEdit(selectedItem.name);
+    hideContextMenu();
+});
+async function openEdit(name){
+    currentEditFileName = name;
+    const file = await getFile(`files/${name}`);
+    editContent.value = file ? file.content : "";
+    editModal.style.display = "flex";
+}
+editCancelBtn.addEventListener("click",()=>editModal.style.display="none");
+editSaveBtn.addEventListener("click",async ()=>{
+    await saveFile(`files/${currentEditFileName}`, btoa(editContent.value));
+    editModal.style.display = "none";
+    alert("✅ File saved to GitHub!");
+});
+
+document.getElementById("downloadMenu").addEventListener("click",async ()=>{
+    if(!selectedItem || selectedItem.type!=="file") return;
+    hideContextMenu();
+    const fileName = selectedItem.name;
+    const file = await getFile(`files/${fileName}`);
+    if(!file) return alert("❌ File not found");
+    const raw = atob(file.raw);
+    const arr = new Uint8Array([...raw].map(c=>c.charCodeAt(0)));
+    const blob = new Blob([arr]);
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement("a");
+    a.href = url;
+    a.download = fileName;
+    a.click();
+    URL.revokeObjectURL(url);
+});
+
+document.getElementById("renameMenu").addEventListener("click",()=>{
+    if(!selectedItem) return;
+    renameInput.value = selectedItem.name;
+    renameModal.style.display = "flex";
+    hideContextMenu();
+});
+renameCancelBtn.addEventListener("click",()=>renameModal.style.display="none");
+renameConfirmBtn.addEventListener("click",async ()=>{
+    if(!selectedItem) return;
+    const oldName = selectedItem.name;
+    const newName = renameInput.value.trim();
+    if(!newName) return;
+    selectedItem.name = newName;
+    await saveFS();
+    if(selectedItem.type === "file"){
+        const oldPath = `files/${oldName}`;
+        const newPath = `files/${newName}`;
+        const oldFile = await getFile(oldPath);
+        if(oldFile){
+            await saveFile(newPath, oldFile.raw);
+            await deleteFile(oldPath, oldFile.sha);
+        }
+    }
+    renameModal.style.display = "none";
+    render();
+    alert("✅ Renamed successfully!");
+});
+
+document.getElementById("deleteMenu").addEventListener("click",async ()=>{
+    if(!selectedItem) return;
+    const name = selectedItem.name;
+    const type = selectedItem.type;
+    const idx = currentDir.children.indexOf(selectedItem);
+    if(idx > -1) currentDir.children.splice(idx,1);
+    await saveFS();
+    if(type === "file"){
+        const filePath = `files/${name}`;
+        const file = await getFile(filePath);
+        if(file) await deleteFile(filePath, file.sha);
+    }
+    render();
+    hideContextMenu();
+    alert("✅ Deleted successfully!");
+});
+
+newFolderBtn.addEventListener("click",async ()=>{
+    const name = prompt("Folder name:","New Folder");
+    if(!name) return;
+    currentDir.children.push({name, type:"folder", children:[]});
+    await saveFS();
+    render();
+    alert("✅ Folder created!");
+});
+
+newFileBtn.addEventListener("click",async ()=>{
+    const name = prompt("File name:","newfile.txt");
+    if(!name) return;
+    await saveFile(`files/${name}`, btoa(""));
+    currentDir.children.push({name, type:"file"});
+    await saveFS();
+    render();
+    alert("✅ Text file created!");
+});
+
+uploadFileBtn.addEventListener("click",()=>{
+    uploadLocalFileInput.click();
+});
+uploadLocalFileInput.addEventListener("change",async e=>{
+    const file = e.target.files[0];
+    if(!file) return;
+    const reader = new FileReader();
+    reader.onload = async function(ev){
+        const base64 = ev.target.result.split(",")[1];
+        const fileName = file.name;
+        await saveFile(`files/${fileName}`, base64);
+        let exists = currentDir.children.some(x=>x.name===fileName && x.type==="file");
+        if(!exists){
+            currentDir.children.push({name:fileName, type:"file"});
+            await saveFS();
+        }
+        render();
+        alert(`✅ ${fileName} uploaded to GitHub!`);
+    };
+    reader.readAsDataURL(file);
+});
+
+importFSBtn.addEventListener("click",()=>{
+    importFSInput.click();
+});
+importFSInput.addEventListener("change",async e=>{
+    const file = e.target.files[0];
+    if(!file) return;
+    const text = await file.text();
+    try{
+        const root = JSON.parse(text);
+        await saveFile("fs.json", btoa(JSON.stringify(root,null,2)));
+        pathStack = [root];
+        currentDir = root;
+        render();
+        alert("✅ FS imported successfully!");
+    }catch(err){
+        alert("❌ Import failed");
+    }
+});
+
+exportFSBtn.addEventListener("click",()=>{
+    const root = pathStack[0];
+    const jsonStr = JSON.stringify(root,null,2);
+    const blob = new Blob([jsonStr],{type:"application/json"});
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement("a");
+    a.href = url;
+    a.download = "filesystem-backup.json";
+    a.click();
+    URL.revokeObjectURL(url);
+});
+</script>
+
+</body>
+</html>
