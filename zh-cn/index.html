@@ -3,24 +3,24 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>GitHub 文件系统</title>
+<title>GitHub 全能文件管理器（导入导出全部功能）</title>
 <style>
 * { margin:0; padding:0; box-sizing:border-box; font-family:"Microsoft YaHei",sans-serif; }
 body { background:#f5f5f5; height:100vh; display:flex; flex-direction:column; }
 
 .top-bar {
-    height:45px; background:#fff; border-bottom:1px solid #ddd;
-    display:flex; align-items:center; padding:0 12px; gap:8px;
+    height:50px; background:#fff; border-bottom:1px solid #ddd;
+    display:flex; align-items:center; padding:0 10px; gap:6px;
     flex-wrap:wrap;
 }
 .btn {
-    padding:6px 10px; border:1px solid #ccc; background:#fff;
-    border-radius:4px; cursor:pointer; font-size:13px;
+    padding:6px 8px; border:1px solid #ccc; background:#fff;
+    border-radius:4px; cursor:pointer; font-size:12px;
 }
 .btn:hover { background:#f0f0f0; }
 .path-bar {
     flex:1; padding:6px 10px; border:1px solid #ccc; border-radius:4px;
-    min-width:150px;
+    min-width:120px;
 }
 .file-area {
     flex:1; padding:20px; display:grid;
@@ -35,7 +35,7 @@ body { background:#f5f5f5; height:100vh; display:flex; flex-direction:column; }
 .item.selected { background:#cce5ff; }
 
 .context-menu {
-    position:fixed; width:160px; background:#fff;
+    position:fixed; width:180px; background:#fff;
     border:1px solid #ccc; box-shadow:2px 2px 5px #aaa;
     display:none; z-index:999;
 }
@@ -48,7 +48,7 @@ body { background:#f5f5f5; height:100vh; display:flex; flex-direction:column; }
     align-items:center; justify-content:center; z-index:1000;
 }
 .modal-box {
-    background:#fff; padding:20px; border-radius:6px; width:300px;
+    background:#fff; padding:20px; border-radius:6px; width:550px;
 }
 .modal-box input, .modal-box textarea { width:100%; padding:8px; margin:10px 0; }
 .modal-buttons { display:flex; justify-content:flex-end; gap:10px; }
@@ -61,53 +61,68 @@ body { background:#f5f5f5; height:100vh; display:flex; flex-direction:column; }
     <button class="btn" id="backBtn">← 返回</button>
     <input type="text" class="path-bar" id="pathBar" readonly>
     <button class="btn" id="newFolderBtn">新建文件夹</button>
-    <button class="btn" id="newFileBtn">新建文件</button>
-    <button class="btn" id="importBtn">导入FS</button>
-    <button class="btn" id="exportBtn">下载FS</button>
+    <button class="btn" id="newFileBtn">新建文本文件</button>
+    <button class="btn" id="uploadFileBtn">📤 上传本地文件</button>
+    <button class="btn" id="importFSBtn">导入目录结构</button>
+    <button class="btn" id="exportFSBtn">导出目录备份</button>
 </div>
-<div class="tip">所有操作自动保存到 GitHub 仓库</div>
+<div class="tip">✅ 所有文件自动保存到 GitHub cdn 仓库</div>
 <div class="file-area" id="fileArea"></div>
 
 <!-- 右键菜单 -->
 <div class="context-menu" id="contextMenu">
-    <div id="openFileMenu">打开编辑</div>
-    <div id="renameMenu">重命名</div>
-    <div id="deleteMenu">删除</div>
+    <div id="viewMenu">👁 查看</div>
+    <div id="editMenu">✏ 编辑</div>
+    <div id="downloadMenu">💾 下载到本地</div>
+    <div id="renameMenu">📝 重命名</div>
+    <div id="deleteMenu">🗑 删除</div>
+</div>
+
+<!-- 查看弹窗 -->
+<div class="modal" id="viewModal">
+    <div class="modal-box">
+        <h3>👁 查看文件（只读）</h3>
+        <textarea id="viewContent" rows="15" readonly style="white-space:pre-wrap;"></textarea>
+        <div class="modal-buttons">
+            <button class="btn" id="viewCloseBtn">关闭</button>
+        </div>
+    </div>
+</div>
+
+<!-- 编辑弹窗 -->
+<div class="modal" id="editModal">
+    <div class="modal-box">
+        <h3>✏ 编辑文件</h3>
+        <textarea id="editContent" rows="15"></textarea>
+        <div class="modal-buttons">
+            <button class="btn" id="editCancelBtn">取消</button>
+            <button class="btn" id="editSaveBtn">保存到 GitHub</button>
+        </div>
+    </div>
 </div>
 
 <!-- 重命名弹窗 -->
 <div class="modal" id="renameModal">
     <div class="modal-box">
-        <h3>重命名</h3>
+        <h3>📝 重命名</h3>
         <input type="text" id="renameInput">
         <div class="modal-buttons">
-            <button class="btn" id="renameCancel">取消</button>
-            <button class="btn" id="renameConfirm">确定</button>
+            <button class="btn" id="renameCancelBtn">取消</button>
+            <button class="btn" id="renameConfirmBtn">确定</button>
         </div>
     </div>
 </div>
 
-<!-- 文件编辑弹窗 -->
-<div class="modal" id="editModal">
-    <div class="modal-box" style="width:500px;">
-        <h3>编辑文件</h3>
-        <textarea id="editContent" rows="15"></textarea>
-        <div class="modal-buttons">
-            <button class="btn" id="editCancel">取消</button>
-            <button class="btn" id="editSave">保存</button>
-        </div>
-    </div>
-</div>
-
-<!-- 导入隐藏input -->
-<input type="file" id="importFileInput" accept=".json" style="display:none">
+<!-- 隐藏文件输入 -->
+<input type="file" id="uploadLocalFileInput" style="display:none">
+<input type="file" id="importFSInput" accept=".json" style="display:none">
 
 <script>
-// ======================== 已经全部填好！！！ ========================
+// ========== 已填好你的信息，无需修改 ==========
 const GITHUB_USER = "parkerzhang-5";
 const GITHUB_REPO = "cdn";
 const GITHUB_TOKEN = "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";
-// ====================================================================
+// ============================================
 
 const API_BASE = `https://api.github.com/repos/${GITHUB_USER}/${GITHUB_REPO}/contents`;
 let pathStack = [];
@@ -115,34 +130,52 @@ let currentDir = null;
 let selectedItem = null;
 let currentEditFileName = "";
 
+// DOM
 const fileArea = document.getElementById("fileArea");
 const pathBar = document.getElementById("pathBar");
 const backBtn = document.getElementById("backBtn");
 const newFolderBtn = document.getElementById("newFolderBtn");
 const newFileBtn = document.getElementById("newFileBtn");
-const importBtn = document.getElementById("importBtn");
-const exportBtn = document.getElementById("exportBtn");
-const importFileInput = document.getElementById("importFileInput");
+const uploadFileBtn = document.getElementById("uploadFileBtn");
+const importFSBtn = document.getElementById("importFSBtn");
+const exportFSBtn = document.getElementById("exportFSBtn");
+
+const uploadLocalFileInput = document.getElementById("uploadLocalFileInput");
+const importFSInput = document.getElementById("importFSInput");
+
 const contextMenu = document.getElementById("contextMenu");
-const renameModal = document.getElementById("renameModal");
-const renameInput = document.getElementById("renameInput");
+const viewModal = document.getElementById("viewModal");
+const viewContent = document.getElementById("viewContent");
+const viewCloseBtn = document.getElementById("viewCloseBtn");
 const editModal = document.getElementById("editModal");
 const editContent = document.getElementById("editContent");
+const editCancelBtn = document.getElementById("editCancelBtn");
+const editSaveBtn = document.getElementById("editSaveBtn");
+const renameModal = document.getElementById("renameModal");
+const renameInput = document.getElementById("renameInput");
+const renameCancelBtn = document.getElementById("renameCancelBtn");
+const renameConfirmBtn = document.getElementById("renameConfirmBtn");
 
 (async function init(){
-    await loadFS();
+    await initFS();
 })();
 
+// 获取文件（返回 {content, sha}）
 async function getFile(path){
     const res = await fetch(`${API_BASE}/${path}`,{
         headers:{Authorization:`token ${GITHUB_TOKEN}`}
     });
     if(!res.ok) return null;
     const data = await res.json();
-    return {content:atob(data.content),sha:data.sha};
+    return {
+        content: atob(data.content),
+        sha: data.sha,
+        raw: data.content
+    };
 }
 
-async function saveFile(path,content,sha=null){
+// 保存/新建文件
+async function saveFile(path, base64Content, sha=null){
     await fetch(`${API_BASE}/${path}`,{
         method:"PUT",
         headers:{
@@ -151,92 +184,101 @@ async function saveFile(path,content,sha=null){
         },
         body:JSON.stringify({
             message:"auto save",
-            content:btoa(content),
-            sha:sha
+            content: base64Content,
+            sha: sha
         })
     });
 }
 
-async function deleteFile(path,sha){
+// 删除文件
+async function deleteFile(path, sha){
     await fetch(`${API_BASE}/${path}`,{
         method:"DELETE",
         headers:{
             Authorization:`token ${GITHUB_TOKEN}`,
             "Content-Type":"application/json"
         },
-        body:JSON.stringify({message:"delete",sha:sha})
+        body:JSON.stringify({message:"delete", sha:sha})
     });
 }
 
-async function loadFS(){
+// 初始化文件系统
+async function initFS(){
     let fsData = await getFile("fs.json");
     if(!fsData){
-        const initFS = {name:"根目录",type:"folder",children:[]};
-        await saveFile("fs.json",JSON.stringify(initFS,null,2));
-        pathStack=[initFS];
-        currentDir=initFS;
+        await saveFile("fs.json", btoa(JSON.stringify({
+            name:"根目录", type:"folder", children:[]
+        }, null, 2)));
+        alert("✅ 已自动初始化 GitHub 文件系统！");
+        pathStack = [{name:"根目录", type:"folder", children:[]}];
+        currentDir = pathStack[0];
     }else{
-        const root=JSON.parse(fsData.content);
-        pathStack=[root];
-        currentDir=root;
+        const root = JSON.parse(fsData.content);
+        pathStack = [root];
+        currentDir = root;
     }
     render();
 }
 
+// 保存目录结构
 async function saveFS(){
-    const root=pathStack[0];
-    const fsData=await getFile("fs.json");
-    await saveFile("fs.json",JSON.stringify(root,null,2),fsData?.sha);
+    const root = pathStack[0];
+    const fsData = await getFile("fs.json");
+    await saveFile("fs.json", btoa(JSON.stringify(root,null,2)), fsData?.sha);
 }
 
+// 渲染文件列表
 function render(){
-    fileArea.innerHTML="";
-    pathBar.value=pathStack.map(d=>d.name).join(" / ");
-    if(!currentDir.children)return;
+    fileArea.innerHTML = "";
+    pathBar.value = pathStack.map(d=>d.name).join(" / ");
+    if(!currentDir.children) return;
     currentDir.children.forEach(item=>{
-        const div=document.createElement("div");
-        div.className="item";
-        div.dataset.type=item.type;
-        div.dataset.name=item.name;
-        const icon=item.type==="folder"?"📁":"📄";
-        div.innerHTML=`
-            <div class="item-icon">${icon}</div>
-            <div class="item-name">${item.name}</div>
-        `;
+        const div = document.createElement("div");
+        div.className = "item";
+        div.dataset.type = item.type;
+        div.dataset.name = item.name;
+        const icon = item.type === "folder" ? "📁" : "📄";
+        div.innerHTML = `<div class="item-icon">${icon}</div><div class="item-name">${item.name}</div>`;
+
         div.addEventListener("click",e=>{
             e.stopPropagation();
             clearSelect();
             div.classList.add("selected");
-            selectedItem=item;
+            selectedItem = item;
         });
-        div.addEventListener("dblclick",async()=>{
-            if(item.type==="folder"){
+
+        div.addEventListener("dblclick",async ()=>{
+            if(item.type === "folder"){
                 pathStack.push(item);
-                currentDir=item;
+                currentDir = item;
                 render();
             }else{
-                await openEditFile(item.name);
+                await openEdit(item.name);
             }
         });
+
         div.addEventListener("contextmenu",e=>{
             e.preventDefault();
             clearSelect();
             div.classList.add("selected");
-            selectedItem=item;
-            showContextMenu(e.clientX,e.clientY);
+            selectedItem = item;
+            showContextMenu(e.clientX, e.clientY);
         });
+
         fileArea.appendChild(div);
     });
 }
 
+// 返回上级
 backBtn.addEventListener("click",()=>{
     if(pathStack.length>1){
         pathStack.pop();
-        currentDir=pathStack[pathStack.length-1];
+        currentDir = pathStack[pathStack.length-1];
         render();
     }
 });
 
+// 空白处取消选中、关闭右键菜单
 document.addEventListener("click",()=>{
     clearSelect();
     hideContextMenu();
@@ -244,128 +286,188 @@ document.addEventListener("click",()=>{
 
 function clearSelect(){
     document.querySelectorAll(".item.selected").forEach(el=>el.classList.remove("selected"));
-    selectedItem=null;
+    selectedItem = null;
 }
 function showContextMenu(x,y){
-    contextMenu.style.left=x+"px";
-    contextMenu.style.top=y+"px";
-    contextMenu.style.display="block";
+    contextMenu.style.left = x+"px";
+    contextMenu.style.top = y+"px";
+    contextMenu.style.display = "block";
 }
 function hideContextMenu(){
-    contextMenu.style.display="none";
+    contextMenu.style.display = "none";
 }
 
-document.getElementById("openFileMenu").addEventListener("click",async()=>{
-    if(!selectedItem||selectedItem.type!=="file")return;
-    await openEditFile(selectedItem.name);
+// ========== 右键菜单功能 ==========
+// 查看
+document.getElementById("viewMenu").addEventListener("click",async ()=>{
+    if(!selectedItem || selectedItem.type!=="file") return;
+    const file = await getFile(`files/${selectedItem.name}`);
+    viewContent.value = file ? file.content : "";
+    viewModal.style.display = "flex";
     hideContextMenu();
 });
-document.getElementById("renameMenu").addEventListener("click",()=>{
-    if(!selectedItem)return;
-    renameInput.value=selectedItem.name;
-    renameModal.style.display="flex";
+viewCloseBtn.addEventListener("click",()=>viewModal.style.display="none");
+
+// 编辑
+document.getElementById("editMenu").addEventListener("click",async ()=>{
+    if(!selectedItem || selectedItem.type!=="file") return;
+    await openEdit(selectedItem.name);
     hideContextMenu();
 });
-document.getElementById("deleteMenu").addEventListener("click",async()=>{
-    if(!selectedItem)return;
-    const name=selectedItem.name;
-    const type=selectedItem.type;
-    const idx=currentDir.children.indexOf(selectedItem);
-    if(idx>-1)currentDir.children.splice(idx,1);
-    await saveFS();
-    if(type==="file"){
-        const filePath=`files/${name}`;
-        const file=await getFile(filePath);
-        if(file)await deleteFile(filePath,file.sha);
-    }
-    render();
-    hideContextMenu();
+async function openEdit(name){
+    currentEditFileName = name;
+    const file = await getFile(`files/${name}`);
+    editContent.value = file ? file.content : "";
+    editModal.style.display = "flex";
+}
+editCancelBtn.addEventListener("click",()=>editModal.style.display="none");
+editSaveBtn.addEventListener("click",async ()=>{
+    await saveFile(`files/${currentEditFileName}`, btoa(editContent.value));
+    editModal.style.display = "none";
+    alert("✅ 文件已保存到 GitHub！");
 });
 
-document.getElementById("renameCancel").addEventListener("click",()=>{
-    renameModal.style.display="none";
+// 下载单个文件
+document.getElementById("downloadMenu").addEventListener("click",async ()=>{
+    if(!selectedItem || selectedItem.type!=="file") return;
+    hideContextMenu();
+    const fileName = selectedItem.name;
+    const file = await getFile(`files/${fileName}`);
+    if(!file) return alert("❌ 文件不存在");
+    // 二进制直接下载
+    const raw = atob(file.raw);
+    const arr = new Uint8Array([...raw].map(c=>c.charCodeAt(0)));
+    const blob = new Blob([arr]);
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement("a");
+    a.href = url;
+    a.download = fileName;
+    a.click();
+    URL.revokeObjectURL(url);
 });
-document.getElementById("renameConfirm").addEventListener("click",async()=>{
-    if(!selectedItem)return;
-    const oldName=selectedItem.name;
-    const newName=renameInput.value.trim();
-    if(!newName)return;
-    selectedItem.name=newName;
+
+// 重命名
+document.getElementById("renameMenu").addEventListener("click",()=>{
+    if(!selectedItem) return;
+    renameInput.value = selectedItem.name;
+    renameModal.style.display = "flex";
+    hideContextMenu();
+});
+renameCancelBtn.addEventListener("click",()=>renameModal.style.display="none");
+renameConfirmBtn.addEventListener("click",async ()=>{
+    if(!selectedItem) return;
+    const oldName = selectedItem.name;
+    const newName = renameInput.value.trim();
+    if(!newName) return;
+    selectedItem.name = newName;
     await saveFS();
-    if(selectedItem.type==="file"){
-        const oldPath=`files/${oldName}`;
-        const newPath=`files/${newName}`;
-        const oldFile=await getFile(oldPath);
+    if(selectedItem.type === "file"){
+        const oldPath = `files/${oldName}`;
+        const newPath = `files/${newName}`;
+        const oldFile = await getFile(oldPath);
         if(oldFile){
-            await saveFile(newPath,oldFile.content);
-            await deleteFile(oldPath,oldFile.sha);
+            await saveFile(newPath, oldFile.raw);
+            await deleteFile(oldPath, oldFile.sha);
         }
     }
-    renameModal.style.display="none";
+    renameModal.style.display = "none";
     render();
+    alert("✅ 重命名完成！");
 });
 
-newFolderBtn.addEventListener("click",async()=>{
-    const name=prompt("文件夹名：","新建文件夹");
-    if(!name)return;
-    currentDir.children.push({name,type:"folder",children:[]});
+// 删除
+document.getElementById("deleteMenu").addEventListener("click",async ()=>{
+    if(!selectedItem) return;
+    const name = selectedItem.name;
+    const type = selectedItem.type;
+    const idx = currentDir.children.indexOf(selectedItem);
+    if(idx > -1) currentDir.children.splice(idx,1);
+    await saveFS();
+    if(type === "file"){
+        const filePath = `files/${name}`;
+        const file = await getFile(filePath);
+        if(file) await deleteFile(filePath, file.sha);
+    }
+    render();
+    hideContextMenu();
+    alert("✅ 删除完成！");
+});
+
+// ========== 顶部按钮功能 ==========
+// 新建文件夹
+newFolderBtn.addEventListener("click",async ()=>{
+    const name = prompt("文件夹名称：","新建文件夹");
+    if(!name) return;
+    currentDir.children.push({name, type:"folder", children:[]});
     await saveFS();
     render();
+    alert("✅ 文件夹创建成功！");
 });
 
-newFileBtn.addEventListener("click",async()=>{
-    const name=prompt("文件名：","新建文件.txt");
-    if(!name)return;
-    await saveFile(`files/${name}`,"");
-    currentDir.children.push({name,type:"file"});
+// 新建文本文件
+newFileBtn.addEventListener("click",async ()=>{
+    const name = prompt("文件名：","新建文件.txt");
+    if(!name) return;
+    await saveFile(`files/${name}`, btoa(""));
+    currentDir.children.push({name, type:"file"});
     await saveFS();
     render();
+    alert("✅ 文本文件创建成功！");
 });
 
-async function openEditFile(name){
-    currentEditFileName=name;
-    const file=await getFile(`files/${name}`);
-    editContent.value=file?file.content:"";
-    editModal.style.display="flex";
-}
-document.getElementById("editCancel").addEventListener("click",()=>{
-    editModal.style.display="none";
+// 上传本地任意文件（图片、压缩包、视频、所有格式）
+uploadFileBtn.addEventListener("click",()=>{
+    uploadLocalFileInput.click();
 });
-document.getElementById("editSave").addEventListener("click",async()=>{
-    await saveFile(`files/${currentEditFileName}`,editContent.value);
-    editModal.style.display="none";
-    alert("已保存到GitHub！");
-});
-
-// ========== 导入整个文件系统 ==========
-importBtn.addEventListener("click",()=>{
-    importFileInput.click();
-});
-importFileInput.addEventListener("change",async e=>{
-    const file=e.target.files[0];
-    if(!file)return;
-    const text=await file.text();
-    try{
-        const root=JSON.parse(text);
-        await saveFile("fs.json",JSON.stringify(root,null,2));
-        pathStack=[root];
-        currentDir=root;
+uploadLocalFileInput.addEventListener("change",async e=>{
+    const file = e.target.files[0];
+    if(!file) return;
+    const reader = new FileReader();
+    reader.onload = async function(ev){
+        const base64 = ev.target.result.split(",")[1];
+        const fileName = file.name;
+        await saveFile(`files/${fileName}`, base64);
+        // 加入目录结构
+        let exists = currentDir.children.some(x=>x.name===fileName && x.type==="file");
+        if(!exists){
+            currentDir.children.push({name:fileName, type:"file"});
+            await saveFS();
+        }
         render();
-        alert("导入成功！");
+        alert(`✅ ${fileName} 上传成功到 GitHub！`);
+    };
+    reader.readAsDataURL(file);
+});
+
+// 导入目录结构 JSON
+importFSBtn.addEventListener("click",()=>{
+    importFSInput.click();
+});
+importFSInput.addEventListener("change",async e=>{
+    const file = e.target.files[0];
+    if(!file) return;
+    const text = await file.text();
+    try{
+        const root = JSON.parse(text);
+        await saveFile("fs.json", btoa(JSON.stringify(root,null,2)));
+        pathStack = [root];
+        currentDir = root;
+        render();
+        alert("✅ 目录结构导入成功！");
     }catch(err){
-        alert("导入失败，文件格式错误");
+        alert("❌ 导入失败，文件格式错误");
     }
 });
 
-// ========== 下载整个文件系统 ==========
-exportBtn.addEventListener("click",()=>{
-    const root=pathStack[0];
-    const jsonStr=JSON.stringify(root,null,2);
-    const blob=new Blob([jsonStr],{type:"application/json"});
-    const url=URL.createObjectURL(blob);
-    const a=document.createElement("a");
-    a.href=url;
-    a.download="filesystem-backup.json";
+// 导出整个目录结构备份
+exportFSBtn.addEventListener("click",()=>{
+    const root = pathStack[0];
+    const jsonStr = JSON.stringify(root,null,2);
+    const blob = new Blob([jsonStr],{type:"application/json"});
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement("a");
+    a.href = url;
+    a.download = "filesystem-backup.json";
     a.click();
     URL.revokeObjectURL(url);
 });
