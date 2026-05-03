@@ -1,2 +1,202 @@
-<h1>this is Not graphical</h1>
-<a href="https://cdn.zhangparker.online/index.html">go a way</a>
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>极简文件管理器</title>
+<style>
+* { margin:0; padding:0; box-sizing:border-box; font-family:system-ui, sans-serif; }
+body { padding:15px; background:#fff; color:#222; }
+.top { margin-bottom:15px; display:flex; gap:8px; flex-wrap:wrap; }
+button { padding:8px 12px; border:1px solid #999; background:#fff; border-radius:4px; cursor:pointer; }
+button:hover { background:#f5f5f5; }
+#path { margin-bottom:10px; font-size:14px; color:#666; }
+.list { display:grid; grid-template-columns:repeat(auto-fill, 120px); gap:10px; }
+.item { padding:10px; border:1px solid #eee; border-radius:4px; cursor:pointer; text-align:center; }
+.item:hover { background:#f8f8f8; }
+.item.folder { color:#005cc5; }
+.file-view { margin-top:20px; width:100%; min-height:300px; padding:10px; border:1px solid #ddd; }
+</style>
+</head>
+<body>
+
+<div class="top">
+  <button id="backBtn">返回</button>
+  <button id="newFolderBtn">新建文件夹</button>
+  <button id="newFileBtn">新建文件</button>
+  <button id="uploadBtn">上传</button>
+  <button id="deleteBtn">删除选中</button>
+  <button id="downloadBtn">下载选中</button>
+</div>
+
+<div id="path">当前：根目录</div>
+<div class="list" id="list"></div>
+<textarea class="file-view" id="fileView" placeholder="文件内容预览..." readonly></textarea>
+
+<input type="file" id="uploadInput" style="display:none">
+
+<script>
+// 配置
+const GITHUB_USER = "parkerzhang-5";
+const GITHUB_REPO = "cdn";
+const GITHUB_TOKEN = "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";
+const API_BASE = `https://api.github.com/repos/${GITHUB_USER}/${GITHUB_REPO}/contents`;
+
+let pathStack = [];
+let currentDir = null;
+let selectedItem = null;
+
+const list = document.getElementById("list");
+const pathEl = document.getElementById("path");
+const fileView = document.getElementById("fileView");
+const uploadInput = document.getElementById("uploadInput");
+
+// 初始化
+(async ()=>{
+  await initFS();
+  render();
+})();
+
+// 读取/保存/删除 GitHub 文件
+async function getFile(path){
+  const res = await fetch(`${API_BASE}/${path}`, { headers:{Authorization:`token ${GITHUB_TOKEN}`} });
+  if(!res.ok) return null;
+  const d = await res.json();
+  return { content:atob(d.content), sha:d.sha, raw:d.content };
+}
+async function saveFile(path, base64, sha=null){
+  await fetch(`${API_BASE}/${path}`, {
+    method:"PUT",
+    headers:{ Authorization:`token ${GITHUB_TOKEN}`, "Content-Type":"application/json" },
+    body:JSON.stringify({ message:"auto", content:base64, sha })
+  });
+}
+async function delFile(path, sha){
+  await fetch(`${API_BASE}/${path}`, {
+    method:"DELETE",
+    headers:{ Authorization:`token ${GITHUB_TOKEN}`, "Content-Type":"application/json" },
+    body:JSON.stringify({ message:"del", sha })
+  });
+}
+
+// 文件系统初始化
+async function initFS(){
+  let fs = await getFile("fs.json");
+  if(!fs){
+    await saveFile("fs.json", btoa(JSON.stringify({ name:"根目录", type:"folder", children:[] }, null, 2)));
+    pathStack = [{ name:"根目录", type:"folder", children:[] }];
+  } else {
+    pathStack = [JSON.parse(fs.content)];
+  }
+  currentDir = pathStack[pathStack.length-1];
+}
+async function saveFS(){
+  const root = pathStack[0];
+  const fs = await getFile("fs.json");
+  await saveFile("fs.json", btoa(JSON.stringify(root,null,2)), fs?.sha);
+}
+
+// 渲染列表
+function render(){
+  list.innerHTML = "";
+  pathEl.textContent = "当前：" + pathStack.map(d=>d.name).join(" / ");
+  fileView.value = "";
+  selectedItem = null;
+
+  if(!currentDir.children) return;
+  currentDir.children.forEach(item=>{
+    const div = document.createElement("div");
+    div.className = "item" + (item.type==="folder"?" folder":"");
+    div.textContent = item.name;
+    div.onclick = ()=>{
+      selectedItem = item;
+      if(item.type === "folder"){
+        pathStack.push(item);
+        currentDir = item;
+        render();
+      } else {
+        showFile(item.name);
+      }
+    };
+    list.appendChild(div);
+  });
+}
+
+// 查看文件内容
+async function showFile(name){
+  const f = await getFile(`files/${name}`);
+  fileView.value = f ? f.content : "";
+}
+
+// 绑定按钮
+document.getElementById("backBtn").onclick = ()=>{
+  if(pathStack.length>1){
+    pathStack.pop();
+    currentDir = pathStack[pathStack.length-1];
+    render();
+  }
+};
+
+document.getElementById("newFolderBtn").onclick = async ()=>{
+  const name = prompt("文件夹名：","新建文件夹");
+  if(!name) return;
+  currentDir.children.push({ name, type:"folder", children:[] });
+  await saveFS();
+  render();
+};
+
+document.getElementById("newFileBtn").onclick = async ()=>{
+  const name = prompt("文件名：","新建文件.txt");
+  if(!name) return;
+  await saveFile(`files/${name}`, btoa(""));
+  currentDir.children.push({ name, type:"file" });
+  await saveFS();
+  render();
+};
+
+document.getElementById("uploadBtn").onclick = ()=>uploadInput.click();
+uploadInput.onchange = async (e)=>{
+  const file = e.target.files[0];
+  if(!file) return;
+  const reader = new FileReader();
+  reader.onload = async ev=>{
+    const base64 = ev.target.result.split(",")[1];
+    const name = file.name;
+    await saveFile(`files/${name}`, base64);
+    if(!currentDir.children.some(x=>x.name===name)){
+      currentDir.children.push({ name, type:"file" });
+      await saveFS();
+    }
+    render();
+  };
+  reader.readAsDataURL(file);
+};
+
+document.getElementById("deleteBtn").onclick = async ()=>{
+  if(!selectedItem) return alert("请先选中文件/文件夹");
+  const idx = currentDir.children.indexOf(selectedItem);
+  if(idx===-1) return;
+  if(selectedItem.type==="file"){
+    const f = await getFile(`files/${selectedItem.name}`);
+    if(f) await delFile(`files/${selectedItem.name}`, f.sha);
+  }
+  currentDir.children.splice(idx,1);
+  await saveFS();
+  render();
+};
+
+document.getElementById("downloadBtn").onclick = async ()=>{
+  if(!selectedItem || selectedItem.type!=="file") return alert("请先选中文件");
+  const f = await getFile(`files/${selectedItem.name}`);
+  const raw = atob(f.raw);
+  const arr = new Uint8Array([...raw].map(c=>c.charCodeAt(0)));
+  const blob = new Blob([arr]);
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement("a");
+  a.href = url;
+  a.download = selectedItem.name;
+  a.click();
+};
+</script>
+</body>
+</html>
