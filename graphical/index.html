@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>极简文件管理器</title>
+<title>极简文件管理器（自有域名终极版）</title>
 <style>
 * { margin:0; padding:0; box-sizing:border-box; font-family:system-ui, sans-serif; }
 body { padding:15px; background:#fff; color:#222; }
@@ -36,11 +36,16 @@ button:hover { background:#f5f5f5; }
 <input type="file" id="uploadInput" style="display:none">
 
 <script>
-// 配置
+// 你的配置（无需修改）
 const GITHUB_USER = "parkerzhang-5";
 const GITHUB_REPO = "cdn";
 const GITHUB_TOKEN = "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";
-const API_BASE = `https://api.github.com/repos/${GITHUB_USER}/${GITHUB_REPO}/contents`;
+
+// ===================== 只改这一行！！！ =====================
+const PROXY = "https://proxy.zhangparker.cc/?target=";
+// ===========================================================
+
+const API_BASE = `${PROXY}https://api.github.com/repos/${GITHUB_USER}/${GITHUB_REPO}/contents`;
 
 let pathStack = [];
 let currentDir = null;
@@ -51,13 +56,11 @@ const pathEl = document.getElementById("path");
 const fileView = document.getElementById("fileView");
 const uploadInput = document.getElementById("uploadInput");
 
-// 初始化
 (async ()=>{
   await initFS();
   render();
 })();
 
-// 读取/保存/删除 GitHub 文件
 async function getFile(path){
   const res = await fetch(`${API_BASE}/${path}`, { headers:{Authorization:`token ${GITHUB_TOKEN}`} });
   if(!res.ok) return null;
@@ -79,7 +82,6 @@ async function delFile(path, sha){
   });
 }
 
-// 文件系统初始化
 async function initFS(){
   let fs = await getFile("fs.json");
   if(!fs){
@@ -96,7 +98,6 @@ async function saveFS(){
   await saveFile("fs.json", btoa(JSON.stringify(root,null,2)), fs?.sha);
 }
 
-// 渲染列表
 function render(){
   list.innerHTML = "";
   pathEl.textContent = "当前：" + pathStack.map(d=>d.name).join(" / ");
@@ -122,13 +123,11 @@ function render(){
   });
 }
 
-// 查看文件内容
 async function showFile(name){
   const f = await getFile(`files/${name}`);
   fileView.value = f ? f.content : "";
 }
 
-// 绑定按钮
 document.getElementById("backBtn").onclick = ()=>{
   if(pathStack.length>1){
     pathStack.pop();
@@ -143,6 +142,7 @@ document.getElementById("newFolderBtn").onclick = async ()=>{
   currentDir.children.push({ name, type:"folder", children:[] });
   await saveFS();
   render();
+  alert("✅ 创建成功！");
 };
 
 document.getElementById("newFileBtn").onclick = async ()=>{
@@ -152,6 +152,7 @@ document.getElementById("newFileBtn").onclick = async ()=>{
   currentDir.children.push({ name, type:"file" });
   await saveFS();
   render();
+  alert("✅ 创建成功！");
 };
 
 document.getElementById("uploadBtn").onclick = ()=>uploadInput.click();
@@ -168,6 +169,7 @@ uploadInput.onchange = async (e)=>{
       await saveFS();
     }
     render();
+    alert("✅ 上传成功！");
   };
   reader.readAsDataURL(file);
 };
@@ -183,6 +185,7 @@ document.getElementById("deleteBtn").onclick = async ()=>{
   currentDir.children.splice(idx,1);
   await saveFS();
   render();
+  alert("✅ 删除成功！");
 };
 
 document.getElementById("downloadBtn").onclick = async ()=>{
